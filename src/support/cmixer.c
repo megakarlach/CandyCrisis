@@ -27,6 +27,7 @@ IN THE SOFTWARE.
 
 #include "cmixer.h"
 #include "ibxm.h"
+#include <vorbis/vorbisfile.h>
 
 #include <SDL3/SDL.h>
 #include <stdint.h>
@@ -64,6 +65,13 @@ enum
 	PCMFORMAT_2CH_BE16	= PCMFORMAT_2CH_LE16 | 0x80,
 };
 
+enum
+{
+	CM_STREAM_NONE,
+	CM_STREAM_PCM,
+	CM_STREAM_MOD,
+};
+
 struct CMWavStream
 {
 	uint8_t pcmformat;
@@ -99,6 +107,7 @@ struct CMVoice
 	int sustainOffset;				// Offset of the sustain loop in frames
 	int end;						// End index for the current play-through
 	int state;						// Current state (playing|paused|stopped)
+	int streamType;					// PCM or tracker music stream type
 	int64_t position;				// Current playhead position (fixed point)
 	int lgain, rgain;				// Left and right gain (fixed point)
 	int rate;						// Playback rate (fixed point)
@@ -135,6 +144,7 @@ static void CMVoice_RemoveFromMixer(CMVoice* voice);
 static void CMVoice_AddToMix(CMVoice* voice, int len, int32_t* dst);
 
 static inline CMWavStream* CMWavStream_Check(CMVoice* voice);
+static CMVoice* NewPCMVoice(int sampleRate, int channels, int bitdepth, char* data, size_t dataLength, bool ownData);
 static void StreamWav(CMVoice* voice, int16_t* output, int length);
 static void RewindWav(CMVoice* voice);
 static void FreeWav(CMVoice* voice);
@@ -449,6 +459,7 @@ static CMVoice* CMVoice_New(int sampleRate, int sampleCount)
 	voice->sampleCount = 0;
 	voice->end = 0;
 	voice->state = CM_STATE_STOPPED;
+	voice->streamType = CM_STREAM_NONE;
 	voice->position = 0;
 	voice->lgain = 0;
 	voice->rgain = 0;
@@ -739,12 +750,34 @@ static CMWavStream* InstallWavStream(CMVoice* voice)
 	wav->cookie = 'WAVS';
 	wav->pcmformat = PCMFORMAT_NULL;
 	wav->idx = 0;
+	voice->streamType = CM_STREAM_PCM;
 
 	voice->callbacks.fillBuffer = StreamWav;
 	voice->callbacks.rewind = RewindWav;
 	voice->callbacks.free = FreeWav;
 
 	return wav;
+}
+
+static CMVoice* NewPCMVoice(int sampleRate, int channels, int bitdepth, char* data, size_t dataLength, bool ownData)
+{
+	int bytesPerFrame = channels * (bitdepth / 8);
+	CM_ASSERT(sampleRate > 0, "weird samplerate");
+	CM_ASSERT(channels == 1 || channels == 2, "unsupported channel count");
+	CM_ASSERT(bitdepth == 8 || bitdepth == 16, "unsupported bitdepth");
+	CM_ASSERT(bytesPerFrame > 0, "invalid frame size");
+
+	CMVoice* voice = CMVoice_New(sampleRate, (int) (dataLength / (size_t) bytesPerFrame));
+	CMWavStream* wav = InstallWavStream(voice);
+
+	wav->pcmformat = BuildPCMFormat(bitdepth, channels, false);
+	wav->data = data;
+	wav->dataLength = dataLength;
+	wav->ownData = ownData;
+
+	CM_ASSERT(wav->pcmformat != 0, "weird pcmformat");
+
+	return voice;
 }
 
 static void FreeWav(CMVoice* voice)
@@ -912,20 +945,169 @@ CMVoice* CMVoice_LoadWAV(const char* path)
 
 	const char* sampleData = p;
 	int sampleDataLength = sz;
-	int samplecount = (sampleDataLength / (bitdepth / 8)) / channels;
-
-	CMVoice* voice = CMVoice_New(samplerate, samplecount);
-	CMWavStream* wav = InstallWavStream(voice);
-
-	wav->pcmformat = BuildPCMFormat(bitdepth, channels, 0);
-	wav->data = SDL_malloc(sampleDataLength);
-	wav->dataLength = sampleDataLength;
-	wav->ownData = true;
-	SDL_memcpy(wav->data, sampleData, sampleDataLength);
+	char* copiedSampleData = SDL_malloc(sampleDataLength);
+	SDL_memcpy(copiedSampleData, sampleData, sampleDataLength);
 
 	SDL_free(data);
 
-	CM_ASSERT(wav->pcmformat != 0, "weird pcmformat");
+	return NewPCMVoice(samplerate, channels, bitdepth, copiedSampleData, sampleDataLength, true);
+}
+
+//-----------------------------------------------------------------------------
+// OGG loader
+
+static bool ReserveDecodedPCM(uint8_t** data, size_t* capacity, size_t requiredSize)
+{
+	if (requiredSize <= *capacity)
+	{
+		return true;
+	}
+
+	size_t newCapacity = *capacity ? *capacity : 65536;
+	while (newCapacity < requiredSize)
+	{
+		size_t nextCapacity = newCapacity * 2;
+		if (nextCapacity <= newCapacity)
+		{
+			newCapacity = requiredSize;
+			break;
+		}
+		newCapacity = nextCapacity;
+	}
+
+	void* newData = SDL_realloc(*data, newCapacity);
+	if (!newData)
+	{
+		return false;
+	}
+
+	*data = newData;
+	*capacity = newCapacity;
+	return true;
+}
+
+static size_t OggReadFunc(void* ptr, size_t size, size_t nmemb, void* datasource)
+{
+	SDL_IOStream* stream = (SDL_IOStream*) datasource;
+	size_t bytesRequested = size * nmemb;
+	if (size == 0 || nmemb == 0)
+	{
+		return 0;
+	}
+
+	size_t bytesRead = SDL_ReadIO(stream, ptr, bytesRequested);
+	return bytesRead / size;
+}
+
+static int OggSeekFunc(void* datasource, ogg_int64_t offset, int whence)
+{
+	SDL_IOStream* stream = (SDL_IOStream*) datasource;
+	return SDL_SeekIO(stream, (Sint64) offset, whence) < 0 ? -1 : 0;
+}
+
+static int OggCloseFunc(void* datasource)
+{
+	SDL_IOStream* stream = (SDL_IOStream*) datasource;
+	return SDL_CloseIO(stream) ? 0 : -1;
+}
+
+static long OggTellFunc(void* datasource)
+{
+	SDL_IOStream* stream = (SDL_IOStream*) datasource;
+	Sint64 pos = SDL_TellIO(stream);
+	return pos < 0 ? -1L : (long) pos;
+}
+
+CMVoice* CMVoice_LoadOGG(const char* path)
+{
+	SDL_IOStream* stream = NULL;
+	OggVorbis_File vf;
+	ov_callbacks callbacks =
+	{
+		.read_func = OggReadFunc,
+		.seek_func = OggSeekFunc,
+		.close_func = OggCloseFunc,
+		.tell_func = OggTellFunc,
+	};
+	uint8_t* decodedPCM = NULL;
+	size_t decodedBytes = 0;
+	size_t decodedCapacity = 0;
+	int sampleRate = 0;
+	int channels = 0;
+	CMVoice* voice = NULL;
+	bool opened = false;
+
+	SDL_memset(&vf, 0, sizeof(vf));
+
+	stream = SDL_IOFromFile(path, "rb");
+	if (!stream)
+	{
+		return NULL;
+	}
+
+	if (ov_open_callbacks(stream, &vf, NULL, 0, callbacks) != 0)
+	{
+		SDL_CloseIO(stream);
+		return NULL;
+	}
+	opened = true;
+
+	vorbis_info* info = ov_info(&vf, -1);
+	if (!info || info->rate <= 0 || (info->channels != 1 && info->channels != 2))
+	{
+		goto cleanup;
+	}
+
+	sampleRate = info->rate;
+	channels = info->channels;
+
+	ogg_int64_t totalSamples = ov_pcm_total(&vf, -1);
+	if (totalSamples > 0)
+	{
+		size_t initialSize = (size_t) totalSamples * (size_t) channels * sizeof(int16_t);
+		if (!ReserveDecodedPCM(&decodedPCM, &decodedCapacity, initialSize))
+		{
+			goto cleanup;
+		}
+	}
+
+	for (;;)
+	{
+		int bitstream = 0;
+		char temp[4096];
+		long bytesRead = ov_read(&vf, temp, (int) sizeof(temp), 0, 2, 1, &bitstream);
+
+		if (bytesRead == 0)
+		{
+			break;
+		}
+		if (bytesRead < 0)
+		{
+			goto cleanup;
+		}
+
+		size_t newDecodedBytes = decodedBytes + (size_t) bytesRead;
+		if (!ReserveDecodedPCM(&decodedPCM, &decodedCapacity, newDecodedBytes))
+		{
+			goto cleanup;
+		}
+
+		SDL_memcpy(decodedPCM + decodedBytes, temp, (size_t) bytesRead);
+		decodedBytes = newDecodedBytes;
+	}
+
+	if (decodedBytes > 0)
+	{
+		voice = NewPCMVoice(sampleRate, channels, 16, (char*) decodedPCM, decodedBytes, true);
+		decodedPCM = NULL;
+	}
+
+cleanup:
+	if (opened)
+	{
+		ov_clear(&vf);
+	}
+	SDL_free(decodedPCM);
 
 	return voice;
 }
@@ -952,6 +1134,7 @@ CMVoice* CMVoice_LoadMOD(const char* path)
 	CMVoice* voice = CMVoice_New(gMixer.samplerate, INT_MAX);
 	voice->callbacks.fillBuffer = StreamMod;
 	voice->callbacks.free = FreeMod;
+	voice->streamType = CM_STREAM_MOD;
 
 	voice->mod.cookie = 'MODS';
 	voice->mod.replayBuffer = SDL_calloc(1, 2048 * 8 * sizeof(voice->mod.replayBuffer[0]));
@@ -983,6 +1166,26 @@ void CMVoice_SetMODPlaybackSpeed(CMVoice* voice, double speed)
 	CMModStream* mod = CMModStream_Check(voice);
 
 	mod->playbackSpeedMult = speed;
+}
+
+void CMVoice_SetMusicPlaybackSpeed(CMVoice* voice, double speed)
+{
+	CMVoice_Check(voice);
+
+	switch (voice->streamType)
+	{
+		case CM_STREAM_MOD:
+			CMVoice_SetMODPlaybackSpeed(voice, speed);
+			break;
+
+		case CM_STREAM_PCM:
+			CMVoice_SetInterpolation(voice, speed != 1.0);
+			CMVoice_SetPitch(voice, speed);
+			break;
+
+		default:
+			break;
+	}
 }
 
 static void StreamMod(CMVoice* voice, int16_t* output, int length)

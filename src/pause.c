@@ -535,9 +535,9 @@ enum
 
 static void DrawContinueContents( int *item, int shade )
 {
-	char line[4][50] = { "Do you want to continue?",
-	                     "Yes",
-	                     "No",
+	char line[4][50] = { "You got raped! Wanna continue?",
+	                     "Ja!",
+	                     "Nein!",
 	                     "" };	                 
 	MPoint dPoint[4] = { {233, 210}, {280, 220}, {280, 400}, {335, 400} }, hPoint = {255, 320};
 	static int lastCountdown = 0;
@@ -621,7 +621,7 @@ static void DrawHiScoreContents( int *item, int shade )
 	(void) item; // is unused
 
 	line[0] = highScoreText;
-	line[1] = "Please enter your name and press return:";
+	line[1] = "U FAILED NIGGA, PLZ ENTER UR NAME THEN ENTER:";
 	line[2] = highScoreRank;
 
 	for( index=0; index<2; index++ )
@@ -671,7 +671,7 @@ static void DrawControlsContents( int *item, int shade )
 	int         r, g, b;
 	const char  label[8][20] = { "1P Left",   "2P Left", 
 	                             "1P Right",  "2P Right", 
-	                             "1P Drop",   "2P Drop",
+	                             "1P Drip",   "2P Drip",
 	                             "1P Rotate", "2P Rotate" };
 	                           
 	                         
@@ -708,7 +708,7 @@ static void DrawControlsContents( int *item, int shade )
 
 	dPoint.h = 200;
 	dPoint.v = 340;
-	DrawRainbowText( smallFont, "\x03 OK", dPoint, 8.0 + (0.075 * shade), (*item == kControlsOK)? kTextBrightRainbow: kTextRainbow );
+	DrawRainbowText( smallFont, "\x03 K", dPoint, 8.0 + (0.075 * shade), (*item == kControlsOK)? kTextBrightRainbow: kTextRainbow );
 
 	dPoint.h = 365;
 	dPoint.v = 340;
@@ -724,9 +724,9 @@ static void DrawPauseContents( int *item, int shade )
 		musicOn ? "\x01 Music" : "\x02 Music",
 		level == kTutorialLevel ? "\x03 Skip Tutorial" : "\x03 Resume",
 		soundOn ? "\x01 Sound" : "\x02 Sound",
-		"\x03 End Game",
-        "\x03 Video",
-		"\x03 Controls",
+		"\x03 LEAVE DAT SHIT",
+        "\x03 GRAPHICS",
+		"\x03 CONTROLS",
 	};
 
 	SDLU_AcquireSurface( drawSurface );	
@@ -752,9 +752,9 @@ static void DrawVideoSettingsContents(int* item, int shade)
 	}
 	labels[] =
 	{
-		{ kFullscreen,		fullscreen ? "\x01 Fullscreen" : "\x02 Fullscreen" },
-		{ kWidescreen,		widescreen ? "\x01 Widescreen" : "\x02 Widescreen" },
-		{ kScalingMode,		crispUpscaling ? "\x01 Crisp upscaling" : "\x02 Crisp upscaling" },
+		{ kFullscreen,		fullscreen ? "\x01 Fuckscreen" : "\x02 Fuckscreen" },
+		{ kWidescreen,		widescreen ? "\x01 Wide as goatse" : "\x02 Wide as goatse" },
+		{ kScalingMode,		crispUpscaling ? "\x01 RETRO MODE" : "\x02 RETRO MODE" },
 		{ kVideoOK,			"\x03 OK" },
 	};
 

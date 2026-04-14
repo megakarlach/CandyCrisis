@@ -17,7 +17,7 @@ set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "Target macOS architectu
 set(CMAKE_C_STANDARD	17)
 
 project(${GAME_TARGET} LANGUAGES C
-	VERSION 3.0.2)
+	VERSION 26.1.0)
 
 # Create an option to switch between a system sdl library and a vendored sdl library
 option(BUILD_SDL_FROM_SOURCE "Build SDL from source" OFF)
@@ -67,6 +67,24 @@ else()
 	endif()
 	message("Building SDL3 from source: " ${SDL3_DIR})
 	add_subdirectory("${SDL3_DIR}" EXCLUDE_FROM_ALL)
+endif()
+
+#------------------------------------------------------------------------------
+# LOCAL OGG/VORBIS DEPENDENCIES
+#------------------------------------------------------------------------------
+
+set(CANDY_OGG_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../ogg")
+set(CANDY_VORBIS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../vorbis")
+
+if(EXISTS "${CANDY_OGG_DIR}/CMakeLists.txt" AND EXISTS "${CANDY_VORBIS_DIR}/CMakeLists.txt")
+	set(BUILD_TESTING OFF CACHE BOOL "Disable dependency tests" FORCE)
+	set(INSTALL_DOCS OFF CACHE BOOL "Disable dependency docs" FORCE)
+	set(INSTALL_CMAKE_PACKAGE_MODULE OFF CACHE BOOL "Disable dependency package config installs" FORCE)
+
+	add_subdirectory("${CANDY_OGG_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/third_party/ogg" EXCLUDE_FROM_ALL)
+	add_subdirectory("${CANDY_VORBIS_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/third_party/vorbis" EXCLUDE_FROM_ALL)
+else()
+	message(FATAL_ERROR "OGG support requires local checkouts at ../ogg and ../vorbis")
 endif()
 
 #------------------------------------------------------------------------------
@@ -221,6 +239,7 @@ if(NOT SDL_STATIC)
 else()
 	target_link_libraries(${GAME_TARGET} PRIVATE SDL3::SDL3-static)
 endif()
+target_link_libraries(${GAME_TARGET} PRIVATE Vorbis::vorbisfile)
 
 #------------------------------------------------------------------------------
 # COPY ASSETS

@@ -26,9 +26,13 @@ void					CMVoice_TogglePause(CMVoicePtr voice);
 void					CMVoice_Stop(CMVoicePtr voice);
 
 CMVoicePtr				CMVoice_LoadWAV(const char* path);
+CMVoicePtr				CMVoice_LoadOGG(const char* path);
 
 CMVoicePtr				CMVoice_LoadMOD(const char* path);
+void					CMVoice_SetMusicPlaybackSpeed(CMVoicePtr voice, double speed);
 void					CMVoice_SetMODPlaybackSpeed(CMVoicePtr voice, double speed);
+
+CMVoicePtr				CMVoice_LoadMP3(const char* path);
 
 void					cmixer_InitWithSDL(void);
 void					cmixer_ShutdownWithSDL(void);

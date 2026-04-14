@@ -176,9 +176,9 @@ void ShowTitle( void )
 	MPoint dPoint;
 	dPoint.v = (widescreen ? 420 : 480) - 16;
 	dPoint.h = 4;
-	for (const char* scan = "Source port v" PROJECT_VERSION; *scan; scan++)
+	for (const char* scan = "Version v" PROJECT_VERSION; *scan; scan++)
 	{
-		SurfaceBlitCharacter(font, *scan, &dPoint, 50, 50, 50, 1);
+		SurfaceBlitCharacter(font, *scan, &dPoint, 255, 255, 255, 1);
 	}
 	SDLU_ReleaseSurface( g_frontSurface );
 

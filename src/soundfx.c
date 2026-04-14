@@ -77,4 +77,5 @@ void PlayStereoFrequency( int player, short which, short freq )
 
 void UpdateSound()
 {
+    UpdateMusic();
 }

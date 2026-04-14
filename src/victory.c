@@ -24,6 +24,11 @@
 #include "font.h"
 #include <math.h>
 
+enum
+{
+    kMusicFadeOutTicks = 60 * 3
+};
+
 MTicks winTime, loseTime;
 int winStage, loseStage;
 float drop[kGridAcross], last[kGridAcross];
@@ -53,7 +58,7 @@ void EndRound( int player )
 
 	if( player == 0 )
 	{
-		ChooseMusic( -1 );
+		FadeOutMusic( kMusicFadeOutTicks );
 		PlayMono( kLoss );
 	}
 }
@@ -78,7 +83,7 @@ void BeginVictory( int player )
 
 	if( player == 0 )
 	{
-		ChooseMusic( -1 );
+		FadeOutMusic( kMusicFadeOutTicks );
 		PlayMono( kVictory );
 	}
 }
