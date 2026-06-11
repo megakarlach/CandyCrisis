@@ -11,62 +11,80 @@
 
 static SkittlesFont s_font[kNumFonts];
 
+static MBoolean IsWhitePixel(SDL_Surface* surface, int x, int y)
+{
+	SDL_Color pixel;
+	SDLU_GetPixel(surface, x, y, &pixel);
+	return pixel.r == 0xFF && pixel.g == 0xFF && pixel.b == 0xFF;
+}
+
+static MBoolean MeasureFontGlyphs(SDL_Surface* surface, SkittlesFontPtr font, unsigned char* letterMap)
+{
+	int width = surface->w;
+	int y = surface->h - 1;
+	int start;
+	int across = 0;
+	int skip;
+
+	while (across < width && IsWhitePixel(surface, across, y))
+	{
+		across++;
+	}
+	skip = across;
+
+	while (*letterMap)
+	{
+		while (across < width && !IsWhitePixel(surface, across, y))
+		{
+			across++;
+		}
+		if (across >= width)
+		{
+			return false;
+		}
+
+		start = across;
+		font->across[*letterMap] = across + (skip / 2);
+
+		while (across < width && IsWhitePixel(surface, across, y))
+		{
+			across++;
+		}
+		font->width[*letterMap] = across - start - skip;
+
+		letterMap++;
+	}
+
+	return true;
+}
+
 
 static SkittlesFontPtr LoadFont( SkittlesFontPtr font, int pictID, unsigned char *letterMap )
 {
-	unsigned char* lastLine;
-	unsigned char  white;
 	MBoolean       success = false;
-	int            start, across, skip;
 	SDL_Surface*   temporarySurface;
 	SDL_Rect       sdlRect;
 	
-	temporarySurface = LoadPICTAsSurface( pictID, 8 );
+	temporarySurface = LoadPICTAsSurface( pictID, 32 );
 	
 	if( temporarySurface )
 	{
+		success = MeasureFontGlyphs(temporarySurface, font, letterMap);
+
 		sdlRect.x = 0;
 		sdlRect.y = 0;
 		sdlRect.h = temporarySurface->h;
 		sdlRect.w = temporarySurface->w;
-		
-		font->surface = SDLU_InitSurface( &sdlRect, 8 );
 
-		SDLU_BlitSurface(  temporarySurface, &sdlRect,
-		                   font->surface,    &sdlRect  );
-		
-		SDL_DestroySurface( temporarySurface );
-		
-		SDL_assert( font->surface->pixels );
-		
-		white    = SDL_MapSurfaceRGB( font->surface, 0xFF, 0xFF, 0xFF );
-		lastLine = (uint8_t*) font->surface->pixels + (font->surface->pitch * (font->surface->h - 1));
-		across   = 0;
-		
-		// Measure empty space between character breaks
-		while( lastLine[across] == white ) across++;
-		skip = across;
-		
-		success = true;
-
-		// Measure character starts and widths
-		while( *letterMap )
+		if (success)
 		{
-			while( lastLine[across] != white ) across++;
-			if( across > font->surface->pitch ) 
-			{
-				success = false;
-				break;
-			}
-			
-			start = across;
-			font->across[*letterMap] = across + (skip/2);
-
-			while( lastLine[across] == white ) across++;		
-			font->width [*letterMap] = across - start - skip;
-
-			letterMap++;
+			font->surface = SDLU_InitSurface( &sdlRect, 8 );
+			SDL_SetSurfaceBlendMode(temporarySurface, SDL_BLENDMODE_NONE);
+			SDLU_BlitSurface( temporarySurface, &sdlRect,
+			                  font->surface,    &sdlRect );
 		}
+
+		SDL_DestroySurface( temporarySurface );
 	}
 	
 	if( success )
@@ -75,7 +93,9 @@ static SkittlesFontPtr LoadFont( SkittlesFontPtr font, int pictID, unsigned char
 	}
 	else
 	{
-		Error( "LoadFont: files are missing or corrupt" );
+		char error[128];
+		SDL_snprintf(error, sizeof(error), "LoadFont failed for PICT_%d", pictID);
+		Error(error);
 		return NULL;
 	}
 }

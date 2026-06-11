@@ -15,6 +15,7 @@ void InitPlayerWorlds();
 
 void         DrawPICTInSurface( SDL_Surface* surface, int pictID );
 SDL_Surface* LoadPICTAsSurface( int pictID, int depth );
+SDL_Surface* LoadGraphicAsSurface( const char* filename, int depth );
 MBoolean      PICTExists( int pictID );
 
 void SurfaceDrawBoard( int player, const MRect *myRect );

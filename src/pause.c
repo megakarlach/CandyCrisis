@@ -24,6 +24,7 @@
 #include "victory.h"
 #include "hiscore.h"
 #include "score.h"
+#include "uiicons.h"
 
 typedef struct FRGBColor
 {
@@ -55,6 +56,8 @@ static MBoolean timeToRedraw = false;
 
 // for the controls dialog
 static int controlToReplace = -1;
+static MBoolean controlToReplaceController = false;
+static MBoolean waitingForControllerNeutral = false;
 
 // for the enter code dialog
 static char  nameField[256], keyField[256];
@@ -524,6 +527,7 @@ enum
     k1PRight,       k2PRight,
     k1PDrop,        k2PDrop,
     k1PRotate,      k2PRotate,
+    k1PJoyIcons,    k2PJoyIcons,
     kControlsOK,    kControlsReset,
 
 // video settings screen
@@ -662,13 +666,98 @@ static void DrawHiScoreContents( int *item, int shade )
 	SDLU_ReleaseSurface( drawSurface );	
 }
 
+static void DrawPlainText(SkittlesFontPtr font, const char* text, MPoint dPoint, int r, int g, int b)
+{
+	while (*text)
+	{
+		SurfaceBlitCharacter(font, *text++, &dPoint, r, g, b, 1);
+	}
+}
+
+static void GetControlsBindingRects(int index, MRect* keyboardRect, MRect* controllerRect)
+{
+	short top = 202 + ((index & ~1) * 13);
+	short leftKeyboard = (index & 1) ? 375 : 170;
+	short leftController = (index & 1) ? 460 : 255;
+
+	keyboardRect->top = top;
+	keyboardRect->left = leftKeyboard;
+	keyboardRect->bottom = top + 22;
+	keyboardRect->right = leftKeyboard + 76;
+
+	controllerRect->top = top;
+	controllerRect->left = leftController;
+	controllerRect->bottom = top + 22;
+	controllerRect->right = leftController + 78;
+}
+
+static void GetControlsThemeRect(int player, MRect* themeRect)
+{
+	themeRect->top = 292;
+	themeRect->bottom = 315;
+	themeRect->left = player ? 375 : 170;
+	themeRect->right = themeRect->left + 135;
+}
+
+static void FillBox(SDL_Surface* surface, const MRect* rect, MBoolean highlight)
+{
+	SDL_Rect sdlRect;
+	SDL_Rect inner;
+	Uint32 borderColor;
+	Uint32 fillColor;
+
+	SDLU_MRectToSDLRect(rect, &sdlRect);
+	inner = sdlRect;
+	inner.x += 1;
+	inner.y += 1;
+	inner.w -= 2;
+	inner.h -= 2;
+
+	borderColor = SDL_MapSurfaceRGB(surface, highlight ? 255 : 116, highlight ? 255 : 190, highlight ? 255 : 255);
+	fillColor = SDL_MapSurfaceRGB(surface, highlight ? 18 : 0, highlight ? 38 : 0, highlight ? 78 : 0);
+
+	SDL_FillSurfaceRect(surface, &sdlRect, borderColor);
+	SDL_FillSurfaceRect(surface, &inner, fillColor);
+}
+
+static void DrawSurfaceCenteredInRect(SDL_Surface* surface, SDL_Surface* icon, const MRect* rect)
+{
+	SDL_Rect sdlRect;
+
+	if (!icon)
+	{
+		return;
+	}
+
+	SDLU_MRectToSDLRect(rect, &sdlRect);
+	UIIcons_DrawSurfaceContain(icon, surface, &sdlRect);
+}
+
+static void DrawTextCenteredInRect(SkittlesFontPtr font, const char* text, const MRect* rect, int r, int g, int b)
+{
+	MPoint dPoint;
+
+	dPoint.h = rect->left + ((rect->right - rect->left) - GetTextWidth(font, text)) / 2;
+	dPoint.v = rect->top + 4;
+	DrawPlainText(font, text, dPoint, r, g, b);
+}
+
 static void DrawControlsContents( int *item, int shade )
 {
 	MBoolean    highlight;
+	MBoolean    keyboardHighlight;
+	MBoolean    controllerHighlight;
+	MBoolean    themeHighlight;
 	MPoint      dPoint;
 	int         index;
 	const char* controlName;
-	int         r, g, b;
+	char        controllerName[64];
+	char        controllerLine[160];
+	char        joyLabel[16];
+	MRect       keyboardRect;
+	MRect       controllerRect;
+	MRect       themeRect;
+	SDL_Surface* icon;
 	const char  label[8][20] = { "1P Left",   "2P Left", 
 	                             "1P Right",  "2P Right", 
 	                             "1P Drip",   "2P Drip",
@@ -680,30 +769,68 @@ static void DrawControlsContents( int *item, int shade )
 	for( index=0; index<8; index++ )
 	{	
 		highlight = (index == (*item - k1PLeft));
+		keyboardHighlight = highlight && controlToReplace == index && !controlToReplaceController;
+		controllerHighlight = highlight && controlToReplace == index && controlToReplaceController;
 		
-		dPoint.v = 229 + ((index & ~1) * 13);
-		dPoint.h = (index & 1)? 325: 130;
+		dPoint.v = 205 + ((index & ~1) * 13);
+		dPoint.h = (index & 1)? 305: 105;
 		DrawRainbowText( smallFont, label[index], dPoint, (0.25 * index) + (0.075 * shade), highlight? kTextBrightRainbow: kTextRainbow );
-				
-		dPoint.v = 245 + ((index & ~1) * 13);
-		dPoint.h = (index & 1)? 420: 225;		
 
-        r = highlight? 255: 0;
-		g = b = (int)(highlight? 255.0 - (88.0 * (sin(shade * 0.2) + 1.0)): 0.0);
-		
-        SurfaceBlitCharacter( dashedLineFont, '.', &dPoint, r, g, b, 0 );
-		SurfaceBlitCharacter( dashedLineFont, '.', &dPoint, r, g, b, 0 );
-		SurfaceBlitCharacter( dashedLineFont, '.', &dPoint, r, g, b, 0 );
-		SurfaceBlitCharacter( dashedLineFont, '.', &dPoint, r, g, b, 0 );
-		SurfaceBlitCharacter( dashedLineFont, '.', &dPoint, r, g, b, 0 );  // 80 pixels across
+		GetControlsBindingRects(index, &keyboardRect, &controllerRect);
+		FillBox(drawSurface, &keyboardRect, highlight || keyboardHighlight);
+		FillBox(drawSurface, &controllerRect, highlight || controllerHighlight);
 		
 		controlName = SDL_GetKeyName( playerKeys[index & 1][index >> 1] );
 		if( controlName == NULL ) controlName = "???";
-		
-		dPoint.v = 231 + ((index & ~1) * 13);
-		dPoint.h = (index & 1)? 460: 265;		
-		dPoint.h -= GetTextWidth( tinyFont, controlName ) / 2;
-		DrawRainbowText( tinyFont, controlName, dPoint, (0.1 * shade), (controlToReplace == index)? kTextBlueGlow: kTextWhite );		
+
+		icon = UIIcons_LoadKeyboardKeyIcon(playerKeys[index & 1][index >> 1], true);
+		if (icon)
+		{
+			DrawSurfaceCenteredInRect(drawSurface, icon, &keyboardRect);
+		}
+		else
+		{
+			DrawTextCenteredInRect(tinyFont, controlName, &keyboardRect, 255, 255, 255);
+		}
+
+		GetControllerBindingName(index & 1, index >> 1, controllerName, sizeof(controllerName));
+		icon = UIIcons_LoadControllerBindingIcon(index & 1, &playerControllerBindings[index & 1][index >> 1]);
+		if (icon)
+		{
+			DrawSurfaceCenteredInRect(drawSurface, icon, &controllerRect);
+		}
+		else
+		{
+			DrawTextCenteredInRect(tinyFont, controllerName, &controllerRect, 255, 255, 255);
+		}
+
+		SDL_snprintf(joyLabel, sizeof(joyLabel), "JOY%d", (index & 1) + 1);
+		dPoint.h = controllerRect.right + 6;
+		dPoint.v = controllerRect.top + 6;
+		DrawPlainText(tinyFont, joyLabel, dPoint, 224, 224, 224);
+	}
+
+	SDL_snprintf(controllerLine, sizeof(controllerLine), "P1: %s", GetPlayerControllerName(0));
+	dPoint.h = 418;
+	dPoint.v = 152;
+	DrawRainbowText(tinyFont, controllerLine, dPoint, 0.6 + (0.05 * shade), kTextAlmostWhite);
+
+	SDL_snprintf(controllerLine, sizeof(controllerLine), "P2: %s", GetPlayerControllerName(1));
+	dPoint.h = 418;
+	dPoint.v = 167;
+	DrawRainbowText(tinyFont, controllerLine, dPoint, 0.9 + (0.05 * shade), kTextAlmostWhite);
+
+	for (int player = 0; player < 2; player++)
+	{
+		GetControlsThemeRect(player, &themeRect);
+		themeHighlight = *item == (player ? k2PJoyIcons : k1PJoyIcons);
+		FillBox(drawSurface, &themeRect, themeHighlight);
+
+		dPoint.h = player ? 305 : 105;
+		dPoint.v = 295;
+		DrawRainbowText(smallFont, player ? "2P Joy Icons" : "1P Joy Icons", dPoint, 4.0 + (0.1 * shade), themeHighlight ? kTextBrightRainbow : kTextRainbow);
+
+		DrawTextCenteredInRect(tinyFont, GetControllerIconThemeName(GetPlayerControllerIconTheme(player)), &themeRect, 255, 255, 255);
 	}
 
 	dPoint.h = 200;
@@ -870,10 +997,14 @@ static MBoolean ControlsSelected( int *item, unsigned char inKey, SDL_Keycode in
 {
 	MPoint          p;
 	MRect           dRect;
+	MRect           controllerRect;
+	MRect           themeRect;
 	int             index;
 	static MBoolean lastDown = false;
 	MBoolean        down;
 	int             returnValue = 0;
+	int             rowIndex = -1;
+	MBoolean        selectingControllerBox = false;
 
 	static const ClickableZone buttonZones[] =
 	{
@@ -899,11 +1030,19 @@ static MBoolean ControlsSelected( int *item, unsigned char inKey, SDL_Keycode in
 					PlayMono(kClick);
 					returnValue = 1;
 					controlToReplace = -1;
+					controlToReplaceController = false;
+					waitingForControllerNeutral = false;
 					break;
 
 				case kControlsReset:
 					PlayMono(kClick);
 					SDL_memcpy(playerKeys, defaultPlayerKeys, sizeof(playerKeys));
+					SDL_memcpy(playerControllerBindings, defaultPlayerControllerBindings, sizeof(playerControllerBindings));
+					playerControllerIconThemes[0] = kControllerIconThemeAuto;
+					playerControllerIconThemes[1] = kControllerIconThemeAuto;
+					controlToReplace = -1;
+					controlToReplaceController = false;
+					waitingForControllerNeutral = false;
 					break;
 			}
 		}
@@ -914,27 +1053,86 @@ static MBoolean ControlsSelected( int *item, unsigned char inKey, SDL_Keycode in
 
 		for( index=0; index<8; index++ )
 		{
-			dRect.top    = 229 + ((index & ~1) * 13);
-			dRect.left   = (index & 1)? 325: 130;
-			dRect.bottom = dRect.top + 24;
-			dRect.right  = dRect.left + 175;
+			GetControlsBindingRects(index, &dRect, &controllerRect);
 
 			if( MPointInMRect( p, &dRect ) )
 			{
 				*item = k1PLeft + index;
-				if( down && !lastDown && !AnyKeyIsPressed() ) 
+				rowIndex = index;
+				selectingControllerBox = false;
+				break;
+			}
+
+			if( MPointInMRect( p, &controllerRect ) )
+			{
+				*item = k1PLeft + index;
+				rowIndex = index;
+				selectingControllerBox = true;
+				break;
+			}
+		}
+
+		for (index = 0; index < 2; index++)
+		{
+			GetControlsThemeRect(index, &themeRect);
+			if (MPointInMRect(p, &themeRect))
+			{
+				*item = index ? k2PJoyIcons : k1PJoyIcons;
+				if (down && !lastDown)
 				{
-					controlToReplace = (controlToReplace == index)? -1: index;
+					Uint8 nextTheme = GetPlayerControllerIconTheme(index) + 1;
+					if (nextTheme >= GetControllerIconThemeCount())
+					{
+						nextTheme = 0;
+					}
+					SetPlayerControllerIconTheme(index, nextTheme);
+					PlayMono(kClick);
 				}
 				break;
 			}
 		}
+
+		if( rowIndex != -1 && down && !lastDown )
+		{
+			if( selectingControllerBox )
+			{
+				controlToReplace = (controlToReplace == rowIndex && controlToReplaceController)? -1: rowIndex;
+				controlToReplaceController = (controlToReplace == -1)? false: true;
+				waitingForControllerNeutral = controlToReplace != -1;
+			}
+			else if( !AnyKeyIsPressed() )
+			{
+				controlToReplace = (controlToReplace == rowIndex && !controlToReplaceController)? -1: rowIndex;
+				controlToReplaceController = false;
+				waitingForControllerNeutral = false;
+			}
+		}
 	}
 	
-	if( inSDLKey != 0 && controlToReplace != -1 )
+	if( inSDLKey != 0 && controlToReplace != -1 && !controlToReplaceController )
 	{
 		playerKeys[controlToReplace & 1][controlToReplace >> 1] = inSDLKey;
 		controlToReplace = -1;
+	}
+	else if( controlToReplace != -1 && controlToReplaceController )
+	{
+		ControllerBinding binding;
+		int player = controlToReplace & 1;
+
+		if( waitingForControllerNeutral )
+		{
+			if( !IsAnyPlayerControllerInputPressed(player) )
+			{
+				waitingForControllerNeutral = false;
+			}
+		}
+		else if( CapturePlayerControllerBinding(player, &binding) )
+		{
+			playerControllerBindings[player][controlToReplace >> 1] = binding;
+			controlToReplace = -1;
+			controlToReplaceController = false;
+			waitingForControllerNeutral = false;
+		}
 	}
 	
 	lastDown = down;
@@ -1109,6 +1307,8 @@ void HandleDialog( int type )
 	keyField[0] = '\0';
 	batsuAlpha = 0;
 	controlToReplace = -1;
+	controlToReplaceController = false;
+	waitingForControllerNeutral = false;
 	
 	// Remember dialog info
 	dialogType = type;

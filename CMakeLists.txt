@@ -23,6 +23,8 @@ project(${GAME_TARGET} LANGUAGES C
 option(BUILD_SDL_FROM_SOURCE "Build SDL from source" OFF)
 option(SDL_STATIC "Static link SDL" OFF)
 option(SANITIZE "Build with asan/ubsan" OFF)
+option(CANDY_ENABLE_CEF "Enable experimental CEF integration scaffolding" OFF)
+option(CANDY_ENABLE_WEBM "Enable experimental WebM integration scaffolding" OFF)
 set(CODE_SIGN_IDENTITY "" CACHE STRING "macOS code signing identity. If omitted, the app won't be signed.")
 
 if(NOT WIN32 AND NOT APPLE)
@@ -128,7 +130,7 @@ set_target_properties(${GAME_TARGET} PROPERTIES
 	#--------------------------------------------------------------------------
 
 	WIN32_EXECUTABLE					TRUE					# GUI application instead of console application
-	VS_DEBUGGER_WORKING_DIRECTORY		"${CMAKE_SOURCE_DIR}"
+	VS_DEBUGGER_WORKING_DIRECTORY		"$<TARGET_FILE_DIR:${GAME_TARGET}>"
 	VS_DPI_AWARE						"PerMonitor"
 
 	#--------------------------------------------------------------------------
@@ -178,6 +180,14 @@ set_target_properties(${GAME_TARGET} PROPERTIES
 add_compile_definitions(
 	"$<$<CONFIG:DEBUG>:_DEBUG>"
 )
+
+if(CANDY_ENABLE_CEF)
+	add_compile_definitions(CANDY_ENABLE_CEF=1)
+endif()
+
+if(CANDY_ENABLE_WEBM)
+	add_compile_definitions(CANDY_ENABLE_WEBM=1)
+endif()
 
 if(NOT MSVC)
 	target_compile_options(${GAME_TARGET} PRIVATE
@@ -240,6 +250,10 @@ else()
 	target_link_libraries(${GAME_TARGET} PRIVATE SDL3::SDL3-static)
 endif()
 target_link_libraries(${GAME_TARGET} PRIVATE Vorbis::vorbisfile)
+
+if(WIN32)
+	target_link_libraries(${GAME_TARGET} PRIVATE ole32 windowscodecs)
+endif()
 
 #------------------------------------------------------------------------------
 # COPY ASSETS

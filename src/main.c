@@ -440,7 +440,7 @@ void Error( const char* extra )
 
 //    fprintf(stderr, "%s\n", error);
 
-    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Candy Crisis", error, NULL);
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Kunny Krysis", error, NULL);
 
     abort();
 }
@@ -568,7 +568,7 @@ void ReserveMonitor( void )
         scale = (int) scale;
     scale = scale < 1 ? 1 : scale;
 
-    SDL_CreateWindowAndRenderer("Candy Crisis (source port v" PROJECT_VERSION ")",
+    SDL_CreateWindowAndRenderer("KUNNY KRYSIS " PROJECT_RELEASEYEAR "",
 								resW*scale, resH*scale,
 								SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY,
 								&g_window, &g_renderer);
@@ -625,7 +625,35 @@ static MBoolean CheckDataPath(void)
 void Initialize(void)
 {
 #if _WIN32
-	SDL_snprintf(candyCrisisResources, sizeof(candyCrisisResources), "CandyCrisisResources\\");
+	char* basePath = SDL_GetBasePath();
+
+	if (basePath)
+	{
+		SDL_snprintf(candyCrisisResources, sizeof(candyCrisisResources), "%sCandyCrisisResources/", basePath);
+		if (CheckDataPath())
+		{
+			goto dataPathFound;
+		}
+
+		SDL_snprintf(candyCrisisResources, sizeof(candyCrisisResources), "%s../CandyCrisisResources/", basePath);
+		if (CheckDataPath())
+		{
+			goto dataPathFound;
+		}
+	}
+
+	SDL_snprintf(candyCrisisResources, sizeof(candyCrisisResources), "CandyCrisisResources/");
+	if (CheckDataPath())
+	{
+		goto dataPathFound;
+	}
+
+	SDL_free(basePath);
+	Error("Couldn't find the CandyCrisisResources folder.");
+	return;
+
+dataPathFound:
+	SDL_free(basePath);
 #elif __APPLE__
 	char pathbuf[PROC_PIDPATHINFO_MAXSIZE];
 

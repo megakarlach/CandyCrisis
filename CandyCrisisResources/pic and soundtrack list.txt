@@ -1,16 +1,20 @@
 
-PICT_2301.jpg (tutorial) | PICT_1001.jpg = mod_128.mod terrible lie
-PICT_1101.jpg = mod_129.S3M sin
-PICT_1201.jpg = mod_130.s3m march of the pigs
-PICT_1301.jpg = mod_131.mod wish
-PICT_1401.jpg = mod_132.s3m closer
-PICT_1501.jpg = mod_133.S3M down in it
-PICT_1601.jpg = mod_134.s3m ringfinger
-PICT_1701.jpg (also settings bg) = mod_135.S3M eraser
-PICT_1801.jpg = mod_136.s3m smell like teen spirit
-PICT_1901.jpg = mod_137.s3m enter sandman
-PICT_2001.jpg = mod_138.s3m never gonna give you up
-PICT_2101.jpg = mod_139.mod master of puppets
-Credits= mod_140.s3m enjoy the silence
-Menu	      = mod_141.s3m Unreal Tournament theme
-?? 	      = mod_142.s3m UT99 - Mechanism Eight
+PICT_2301.jpg (tutorial) | PICT_1001.jpg = mod_128.mod | John Newman - Love Me Again (ogg) | NIN - Terrible Lie (s3m fallback)
+PICT_1101.jpg = mod_129.S3M | Nine Inch Nails - Sin (And All That Could Have Been) (ogg) | NIN - Sin (s3m fallback)
+PICT_1201.jpg = mod_130.s3m | Santé Les Amis - Brasil & Disclosure - F For You (ogg) | NIN - March Of The Pigs (s3m fallback)
+PICT_1301.jpg = mod_131.mod | Empire Of The Sun - Alive & Jax Jones - Yeah Yeah Yeah (ogg) | wish (s3m fallback)
+PICT_1401.jpg = mod_132.s3m | Nine Inch Nails - Closer (ogg and s3m fallback)
+PICT_1501.jpg = mod_133.S3M | Avicii - The Nights & Crystal Fighters - Love Natural (ogg) | down in it (s3m fallback)
+PICT_1601.jpg = mod_134.s3m | ChocQuibTown - Uh la la (ogg) | ringfinger (s3m fallback)
+PICT_1701.jpg (this image is also used for settings bg) = mod_135.S3M | Saint Motel - My Type (ogg) | eraser (s3m fallback)
+PICT_1801.jpg = mod_136.s3m | Joywave - Tongues (ogg) | smell like teen spirit (s3m fallback)
+PICT_1901.jpg = mod_137.s3m | Beck - Dreams (ogg) | enter sandman (s3m fallback)
+PICT_2001.jpg = mod_138.s3m | Parade Of Lights - Feeling Electric | never gonna give you up (s3m fallback)
+PICT_2101.jpg = mod_139.mod | Pitbull - We Are One (Ole Ola) (Olodum Mix) | master of puppets (s3m fallback)
+Credits = mod_140.s3m  | Shakira - La La La (Brazil 2014) | enjoy the silence (s3m fallback)
+Menu	      = mod_141.s3m | MULTI-TRACKS (m3u) | unused (ogg) | Unreal Tournament theme (s3m fallback)
+?? (unused?)	      = mod_142.s3m UT99 - Mechanism Eight (s3m fallback)
+
+
+MULTI-TRACKS MENU
+See soundtracks.xlsx.

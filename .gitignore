@@ -3,7 +3,8 @@
 /cmake-build*
 /dist
 /extern
-
+/build*
 /SDL*
-
+/CandyCrisisResources/ui/music*
+/codex_backups*
 .DS_Store

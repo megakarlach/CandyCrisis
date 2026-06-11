@@ -27,6 +27,7 @@
 #include "keyselect.h"
 #include "tutorial.h"
 #include "pause.h"
+#include "uiicons.h"
 
 MRect stageWindowZRect, stageWindowRect;
 Character character[2];
@@ -119,6 +120,107 @@ static void GameStartMenuRepaint()
 	shouldFullRepaint = true;
 }
 
+static void DrawMenuPromptText(SkittlesFontPtr font, const char* text, MPoint dPoint, int r, int g, int b)
+{
+	while (*text)
+	{
+		SurfaceBlitCharacter(font, *text++, &dPoint, r, g, b, 1);
+	}
+}
+
+static int StepTitleSelection(int current, int direction, MBoolean secretCreditsItem)
+{
+	if (direction == 0)
+	{
+		return current;
+	}
+
+	if (current < 0 || current >= kTitleItems)
+	{
+		current = direction > 0 ? kTitleItem1PGame : kTitleItemQuit;
+	}
+	else
+	{
+		current += direction;
+		if (current < 0)
+		{
+			current = kTitleItems - 1;
+		}
+		else if (current >= kTitleItems)
+		{
+			current = 0;
+		}
+	}
+
+	while (secretCreditsItem && current == kTitleItemCredits)
+	{
+		current += direction;
+		if (current < 0)
+		{
+			current = kTitleItems - 1;
+		}
+		else if (current >= kTitleItems)
+		{
+			current = 0;
+		}
+	}
+
+	return current;
+}
+
+static void DrawStartMenuPromptRow(SDL_Surface* surface, SkittlesFontPtr font, MBoolean useControllerPrompts)
+{
+	SDL_Rect promptStrip = { 0, 430, 640, 50 };
+	SDL_Rect iconRect = { 145, 438, 36, 24 };
+	SDL_Surface* selectIcon = NULL;
+	SDL_Surface* cancelIcon = NULL;
+	MPoint dPoint;
+
+	SDL_FillSurfaceRect(surface, &promptStrip, 0);
+
+	if (useControllerPrompts)
+	{
+		selectIcon = UIIcons_LoadControllerFaceButtonIcon(0, SDL_GAMEPAD_BUTTON_SOUTH);
+		cancelIcon = UIIcons_LoadControllerFaceButtonIcon(0, SDL_GAMEPAD_BUTTON_EAST);
+	}
+	else
+	{
+		selectIcon = UIIcons_LoadKeyboardKeyIcon(SDLK_RETURN, true);
+		cancelIcon = UIIcons_LoadKeyboardKeyIcon(SDLK_ESCAPE, true);
+	}
+
+	if (selectIcon)
+	{
+		UIIcons_DrawSurfaceContain(selectIcon, surface, &iconRect);
+	}
+	else
+	{
+		dPoint.h = iconRect.x + 4;
+		dPoint.v = iconRect.y + 2;
+		DrawMenuPromptText(font, useControllerPrompts ? "A" : "ENTER", dPoint, 255, 255, 255);
+	}
+
+	dPoint.h = 190;
+	dPoint.v = 442;
+	DrawMenuPromptText(font, "Select", dPoint, 255, 255, 255);
+
+	iconRect.x = 330;
+	if (cancelIcon)
+	{
+		UIIcons_DrawSurfaceContain(cancelIcon, surface, &iconRect);
+	}
+	else
+	{
+		dPoint.h = iconRect.x + 4;
+		dPoint.v = iconRect.y + 2;
+		DrawMenuPromptText(font, useControllerPrompts ? "B" : "ESC", dPoint, 255, 255, 255);
+	}
+
+	dPoint.h = 375;
+	dPoint.v = 442;
+	DrawMenuPromptText(font, "Quit", dPoint, 255, 255, 255);
+}
+
 void GameStartMenu( void )
 {
 	MBoolean        useNewTitle = widescreen;
@@ -135,11 +237,16 @@ void GameStartMenu( void )
 	SDL_Rect        destSDLRect;
 	MRect           drawRect[4], chunkRect, tempRect;
 	int             blob, count, oldGlow, splat, chunkType, selected;
+	int             hovered;
 	int             skip;
+	int             lastMouseH, lastMouseV;
 	MPoint          mouse;
 	MPoint          dPoint;
 	unsigned int    black;
 	int             combo[2], comboBright[2], missBright[2];
+	MBoolean        activateSelection;
+	MBoolean        lastMouseDown;
+	MBoolean        lastUpPressed, lastDownPressed, lastReturnPressed, lastEscapePressed;
 	SkittlesFontPtr smallFont = GetFont( picFont );
 	SkittlesFontPtr tinyFont = GetFont( picTinyFont );
 	SDL_Rect        meterRect[2] = { { 30, 360, 110, 20 }, { 530, 360, 110, 20 } };
@@ -163,7 +270,12 @@ redo:
 		
 	skip = 1;
 	selected = -1;
+	hovered = -1;
 	mouse.h = mouse.v = 0;
+	lastMouseH = lastMouseV = -1;
+	activateSelection = false;
+	lastMouseDown = false;
+	lastUpPressed = lastDownPressed = lastReturnPressed = lastEscapePressed = false;
 	
 	if( finished ) return;
 	
@@ -260,12 +372,45 @@ redo:
 
     shouldAddBlob = 5;
 	startMenuTime = MTickCount( );
-	while( ( selected == -1 || !SDLU_Button() ) && !finished )
+	while( !activateSelection && !finished )
 	{	
+		int arraySize;
+		const bool* pressedKeys;
+		MBoolean mouseDown;
+		MBoolean upPressed;
+		MBoolean downPressed;
+		MBoolean returnPressed;
+		MBoolean escapePressed;
+		MBoolean controllerUpPressed;
+		MBoolean controllerDownPressed;
+		MBoolean controllerConfirmPressed;
+		MBoolean controllerCancelPressed;
+		MBoolean useControllerPrompts;
+
 		startMenuTime += skip;
 
         UpdateSound();
-        
+		SDLU_PumpEvents();
+		pressedKeys = SDL_GetKeyboardState(&arraySize);
+		mouseDown = SDLU_Button();
+		upPressed = pressedKeys[SDL_SCANCODE_UP];
+		downPressed = pressedKeys[SDL_SCANCODE_DOWN];
+		returnPressed = pressedKeys[SDL_SCANCODE_RETURN] || pressedKeys[SDL_SCANCODE_KP_ENTER];
+		escapePressed = pressedKeys[SDL_SCANCODE_ESCAPE];
+		controllerUpPressed = AnyMenuControllerUpPressed();
+		controllerDownPressed = AnyMenuControllerDownPressed();
+		controllerConfirmPressed = AnyMenuControllerConfirmPressed();
+		controllerCancelPressed = AnyMenuControllerCancelPressed();
+
+		if ((upPressed && !lastUpPressed) || (downPressed && !lastDownPressed) || (returnPressed && !lastReturnPressed) || (escapePressed && !lastEscapePressed))
+		{
+			UIIcons_RecordKeyboardMouseInput();
+		}
+		if (controllerUpPressed || controllerDownPressed || controllerConfirmPressed || controllerCancelPressed)
+		{
+			UIIcons_RecordControllerInput();
+		}
+         
 		// Add a new falling blob
         --shouldAddBlob;
 		if (shouldAddBlob <= 0)
@@ -456,15 +601,46 @@ redo:
 		
 		// Find mouse coords
 		
-		selected = -1;			
+		hovered = -1;
 		for( count=0; count<kTitleItems; count++ )
 		{
 			if( MPointInMRect( mouse, &titleItems[count].rect ) )
 			{
-				selected = count;
+				hovered = count;
 				break;
 			}
 		}
+		if (hovered >= 0)
+		{
+			selected = hovered;
+		}
+
+		if (mouse.h != lastMouseH || mouse.v != lastMouseV || (mouseDown && !lastMouseDown))
+		{
+			UIIcons_RecordKeyboardMouseInput();
+		}
+		lastMouseH = mouse.h;
+		lastMouseV = mouse.v;
+
+		if ((upPressed && !lastUpPressed) || controllerUpPressed)
+		{
+			selected = StepTitleSelection(selected, -1, secretCreditsItem);
+		}
+		if ((downPressed && !lastDownPressed) || controllerDownPressed)
+		{
+			selected = StepTitleSelection(selected, +1, secretCreditsItem);
+		}
+		if ((mouseDown && !lastMouseDown && hovered >= 0) || ((returnPressed && !lastReturnPressed) && selected >= 0) || (controllerConfirmPressed && selected >= 0))
+		{
+			activateSelection = true;
+		}
+		if ((escapePressed && !lastEscapePressed) || controllerCancelPressed)
+		{
+			selected = kTitleItemQuit;
+			activateSelection = true;
+		}
+
+		useControllerPrompts = UIIcons_ShouldUseControllerPrompts(0);
 
         if (secretCreditsItem)
         {
@@ -501,6 +677,10 @@ redo:
 			}
 		}
 
+		SDLU_AcquireSurface(gameStartDrawSurface);
+		DrawStartMenuPromptRow(gameStartDrawSurface, smallFont, useControllerPrompts);
+		SDLU_ReleaseSurface(gameStartDrawSurface);
+
 		// Reinsert the cursor into the scene
 #if USE_CURSOR_SPRITE
 		InsertCursor( mouse, cursorBackSurface, gameStartDrawSurface );
@@ -530,6 +710,12 @@ redo:
 		}
 
         SDLU_Present();
+
+		lastMouseDown = mouseDown;
+		lastUpPressed = upPressed;
+		lastDownPressed = downPressed;
+		lastReturnPressed = returnPressed;
+		lastEscapePressed = escapePressed;
 
 		// Skip frames? Or delay?
 		if( startMenuTime <= MTickCount( ) )

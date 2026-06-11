@@ -21,6 +21,8 @@ Preference prefList[] =
     { "MusicOn",            &musicOn,           sizeof(MBoolean         ) },
     { "SoundOn",            &soundOn,           sizeof(MBoolean         ) },
     { "KeyBindings",        playerKeys,         sizeof(playerKeys       ) },
+    { "ControllerBindings", playerControllerBindings, sizeof(playerControllerBindings) },
+    { "ControllerIconThemes", playerControllerIconThemes, sizeof(playerControllerIconThemes) },
     { "HighScores",         scores,             sizeof(scores           ) },
     { "BestCombo",          &best,              sizeof(best             ) },
     { "Fullscreen",         &fullscreen,        sizeof(fullscreen       ) },
